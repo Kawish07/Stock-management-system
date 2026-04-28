@@ -124,7 +124,7 @@ export function InvoiceForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-2xl">
-      {apiError && <ApiErrorAlert message={apiError} onDismiss={() => setApiError(null)} />}
+      {apiError && <ApiErrorAlert error={apiError} onDismiss={() => setApiError(null)} />}
 
       {/* ── Product Selection ── */}
       <Card>
