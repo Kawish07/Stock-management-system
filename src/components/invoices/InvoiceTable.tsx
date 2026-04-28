@@ -128,7 +128,7 @@ export function InvoiceTable() {
         <LoadingSkeleton rows={6} />
       ) : isError ? (
         <TableErrorState
-          message={(error as Error)?.message || 'Failed to load invoices'}
+          error={(error as Error)?.message || 'Failed to load invoices'}
           onRetry={() => refetch()}
         />
       ) : !data?.data.length ? (

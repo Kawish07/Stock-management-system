@@ -27,6 +27,7 @@ export interface StockEntry {
   posting_time: string;
   docstatus: 0 | 1 | 2;
   remarks?: string;
+  company?: string;
   items: StockEntryItem[];
   total_amount?: number;
 }
