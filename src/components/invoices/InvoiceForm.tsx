@@ -145,6 +145,7 @@ export function InvoiceForm() {
                 <Select
                   value={field.value}
                   onValueChange={(v) => {
+                    if (!v) return;
                     field.onChange(v);
                     handleItemSelect(v);
                   }}

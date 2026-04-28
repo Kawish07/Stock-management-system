@@ -231,13 +231,14 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
               ) : (
                 <Select
                   value={stockEntryType}
-                  onValueChange={(v) =>
+                  onValueChange={(v) => {
+                    if (!v) return;
                     setValue(
                       'stock_entry_type',
                       v as StockEntrySchema['stock_entry_type'],
                       { shouldValidate: true }
-                    )
-                  }
+                    );
+                  }}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
