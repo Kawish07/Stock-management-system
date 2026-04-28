@@ -39,6 +39,7 @@ export function InvoiceForm() {
 
   const {
     handleSubmit,
+    register,
     control,
     setValue,
     watch,
