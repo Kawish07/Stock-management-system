@@ -288,7 +288,7 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
   const addTax = () => {
     setTaxes((prev) => [
       ...prev,
-      { charge_type: 'On Net Total', account_head: 'Sales Taxes and Charges - Company', description: 'GST', rate: 17 },
+      { charge_type: 'On Net Total', account_head: '', description: 'GST', rate: 17 },
     ]);
   };
 
@@ -302,23 +302,38 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
 
   // â”€â”€ Build payload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function buildPayload(): SalesInvoice {
+    const validRows = rows
+      .filter((r) => r.item_code.trim())
+      .map(({ _id, item_name, amount, ...r }) => {
+        const cleaned = {
+          item_code: r.item_code,
+          qty: r.qty,
+          uom: r.uom,
+          rate: r.rate,
+          description: r.description || undefined,
+          discount_percentage: r.discount_percentage || undefined,
+          warehouse: r.warehouse || undefined,
+        };
+
+        return cleaned;
+      });
+
+    const validTaxes = taxes
+      .filter((t) => t.account_head.trim())
+      .map((t) => ({
+        ...t,
+        tax_amount: subtotal * (t.rate / 100),
+      }));
+
     return {
       ...(existing?.name ? { name: existing.name } : {}),
       customer,
-      customer_name: customerName || customer,
       posting_date: postingDate,
       due_date: dueDate,
-      remarks,
+      remarks: remarks || undefined,
       mode_of_payment: modeOfPayment || undefined,
-      update_stock: 1,
-      items: rows.map(({ _id, ...r }) => ({
-        ...r,
-        amount: calcAmount(r.qty, r.rate, r.discount_percentage ?? 0),
-      })),
-      taxes: taxes.map((t) => ({
-        ...t,
-        tax_amount: subtotal * (t.rate / 100),
-      })),
+      items: validRows,
+      taxes: validTaxes.length ? validTaxes : undefined,
     } as SalesInvoice;
   }
 
@@ -326,7 +341,8 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
   const handleSaveDraft = async () => {
     setApiError(null);
     if (!customer) { setApiError('Please select a customer.'); return; }
-    if (rows.every((r) => !r.item_code)) { setApiError('Add at least one item.'); return; }
+    const hasValidItems = rows.some((r) => r.item_code.trim() && r.qty > 0);
+    if (!hasValidItems) { setApiError('Add at least one valid item with quantity greater than 0.'); return; }
 
     try {
       const payload = buildPayload();
@@ -345,7 +361,8 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
   const handleSubmit = async () => {
     setApiError(null);
     if (!customer) { setApiError('Please select a customer.'); return; }
-    if (rows.every((r) => !r.item_code)) { setApiError('Add at least one item.'); return; }
+    const hasValidItems = rows.some((r) => r.item_code.trim() && r.qty > 0);
+    if (!hasValidItems) { setApiError('Add at least one valid item with quantity greater than 0.'); return; }
 
     try {
       let name = existing?.name;
@@ -599,7 +616,7 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
                   placeholder="Tax name (e.g. GST 17%)"
                   value={tax.description}
                   disabled={!isDraft}
-                  onChange={(e) => updateTax(idx, { description: e.target.value, account_head: e.target.value })}
+                  onChange={(e) => updateTax(idx, { description: e.target.value })}
                 />
                 <div className="flex items-center gap-1 w-28">
                   <Input

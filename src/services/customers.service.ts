@@ -110,15 +110,20 @@ export const customersService = {
 
   async getCustomerBalance(name: string): Promise<number> {
     try {
-      const res = await axiosInstance.get('/method/erpnext.selling.doctype.customer.customer.get_customer_outstanding', {
-        params: { customer: name },
+      const res = await axiosInstance.get('/resource/Sales Invoice', {
+        params: {
+          fields: JSON.stringify(['outstanding_amount']),
+          filters: JSON.stringify([
+            ['Sales Invoice', 'customer', '=', name],
+            ['Sales Invoice', 'docstatus', '=', '1'],
+            ['Sales Invoice', 'outstanding_amount', '>', '0'],
+          ]),
+          limit: 0,
+        },
       });
 
-      const message = res.data?.message;
-      if (typeof message === 'number') return message;
-      if (typeof message === 'string') return Number(message) || 0;
-      if (message && typeof message.outstanding === 'number') return message.outstanding;
-      return 0;
+      const rows = (res.data?.data ?? []) as Array<{ outstanding_amount?: number }>;
+      return rows.reduce((sum, row) => sum + (row.outstanding_amount ?? 0), 0);
     } catch {
       return 0;
     }

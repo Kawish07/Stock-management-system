@@ -153,8 +153,13 @@ export const invoiceService = {
   /** Submit a draft invoice (docstatus 0 → 1). Stock is deducted on submit. */
   async submitInvoice(name: string): Promise<void> {
     try {
+      // Fetch latest doc first so submit includes current modified timestamp
+      const latestDoc = await axiosInstance.get(
+        `/resource/Sales Invoice/${encodeURIComponent(name)}`
+      );
+
       await axiosInstance.post('/method/frappe.client.submit', {
-        doc: { doctype: 'Sales Invoice', name },
+        doc: latestDoc.data.data,
       });
     } catch (error) {
       const { message } = handleApiError(error);
@@ -166,7 +171,70 @@ export const invoiceService = {
   async cancelInvoice(name: string): Promise<void> {
     try {
       await axiosInstance.post('/method/frappe.client.cancel', {
-        doc: { doctype: 'Sales Invoice', name },
+        doctype: 'Sales Invoice',
+        name,
+      });
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Record full payment for a submitted Sales Invoice by creating Payment Entry. */
+  async markInvoicePaid(name: string): Promise<void> {
+    try {
+      const invoiceRes = await axiosInstance.get(
+        `/resource/Sales Invoice/${encodeURIComponent(name)}`
+      );
+      const invoice = invoiceRes.data.data as SalesInvoice;
+      const outstanding = Number(invoice.outstanding_amount ?? 0);
+
+      if (outstanding <= 0) {
+        return;
+      }
+
+      const templateRes = await axiosInstance.get(
+        '/method/erpnext.accounts.doctype.payment_entry.payment_entry.get_payment_entry',
+        {
+          params: {
+            dt: 'Sales Invoice',
+            dn: name,
+          },
+        }
+      );
+
+      const template = templateRes.data?.message as Record<string, unknown> | undefined;
+      if (!template || typeof template !== 'object') {
+        throw new Error('Failed to prepare payment entry for this invoice.');
+      }
+
+      const createPayload = {
+        ...template,
+        paid_amount: outstanding,
+        received_amount: outstanding,
+        reference_no:
+          (typeof template.reference_no === 'string' && template.reference_no.trim())
+            ? template.reference_no
+            : `PAY-${name}`,
+        reference_date:
+          (typeof template.reference_date === 'string' && template.reference_date.trim())
+            ? template.reference_date
+            : (invoice.posting_date || new Date().toISOString().split('T')[0]),
+      };
+
+      const createRes = await axiosInstance.post('/resource/Payment Entry', createPayload);
+      const paymentEntryName = createRes.data?.data?.name as string | undefined;
+
+      if (!paymentEntryName) {
+        throw new Error('Payment Entry was created but no document name was returned.');
+      }
+
+      const latestPayment = await axiosInstance.get(
+        `/resource/Payment Entry/${encodeURIComponent(paymentEntryName)}`
+      );
+
+      await axiosInstance.post('/method/frappe.client.submit', {
+        doc: latestPayment.data.data,
       });
     } catch (error) {
       const { message } = handleApiError(error);

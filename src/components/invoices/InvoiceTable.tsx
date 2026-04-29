@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useInvoices, useSubmitInvoice, useCancelInvoice } from '@/hooks/useInvoice';
+import { useInvoices, useSubmitInvoice, useCancelInvoice, useMarkInvoicePaid } from '@/hooks/useInvoice';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -66,6 +66,7 @@ export function InvoiceTable() {
 
   const submitInvoice = useSubmitInvoice();
   const cancelInvoice = useCancelInvoice();
+  const markInvoicePaid = useMarkInvoicePaid();
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
   const rows = data?.data ?? [];
@@ -213,6 +214,18 @@ export function InvoiceTable() {
                           onClick={() => submitInvoice.mutate(row.name)}
                         >
                           <Send className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {row.docstatus === 1 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-emerald-600"
+                          title="Record Payment"
+                          disabled={(row.outstanding_amount ?? 0) <= 0 || markInvoicePaid.isPending}
+                          onClick={() => markInvoicePaid.mutate(row.name)}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       {row.docstatus === 1 && (

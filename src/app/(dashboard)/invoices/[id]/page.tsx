@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useInvoice, useCancelInvoice } from '@/hooks/useInvoice';
+import { useInvoice, useCancelInvoice, useMarkInvoicePaid } from '@/hooks/useInvoice';
 import { InvoiceForm } from '@/components/invoices/InvoiceForm';
 import { InvoicePrint } from '@/components/invoices/InvoicePrint';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, ArrowLeft, XCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, XCircle, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -18,6 +18,7 @@ export default function InvoiceDetailPage() {
 
   const { data: invoice, isLoading, isError } = useInvoice(name);
   const cancelInvoice = useCancelInvoice();
+  const markInvoicePaid = useMarkInvoicePaid();
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   if (isLoading) {
@@ -48,16 +49,29 @@ export default function InvoiceDetailPage() {
         <Link href="/invoices" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-1.5 print:hidden')}>
           <ArrowLeft className="h-4 w-4" /> Back to Invoices
         </Link>
-        {isSubmitted && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-destructive hover:text-destructive print:hidden"
-            onClick={() => setConfirmCancel(true)}
-          >
-            <XCircle className="h-4 w-4" /> Cancel Invoice
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isSubmitted && (invoice.outstanding_amount ?? 0) > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-emerald-600 hover:text-emerald-600 print:hidden"
+              disabled={markInvoicePaid.isPending}
+              onClick={() => markInvoicePaid.mutate(invoice.name!)}
+            >
+              <CheckCircle2 className="h-4 w-4" /> Record Payment
+            </Button>
+          )}
+          {isSubmitted && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive hover:text-destructive print:hidden"
+              onClick={() => setConfirmCancel(true)}
+            >
+              <XCircle className="h-4 w-4" /> Cancel Invoice
+            </Button>
+          )}
+        </div>
       </div>
 
       <PageHeader

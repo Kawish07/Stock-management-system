@@ -83,9 +83,6 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
   // 2. Prepare Headers
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    // Explicitly clear Expect to prevent Node.js from sending "Expect: 100-continue"
-    // which causes upstream servers (e.g. Frappe/Nginx) to respond with 417.
-    Expect: '',
   };
 
   for (const name of FORWARDED_HEADERS) {

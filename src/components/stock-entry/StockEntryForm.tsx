@@ -37,7 +37,7 @@ import {
   STOCK_ENTRY_TYPES,
   type StockEntry,
 } from '@/types/stockEntry.types';
-import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle, ArrowRightLeft } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -211,14 +211,33 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
       {/* Header fields */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            Entry Details
-            {entry?.docstatus !== undefined && (
-              <Badge className={STATUS_CONFIG[entry.docstatus].cls}>
-                {STATUS_CONFIG[entry.docstatus].label}
-              </Badge>
-            )}
-          </CardTitle>
+          <div className="space-y-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              Entry Details
+              {entry?.docstatus !== undefined && (
+                <Badge className={STATUS_CONFIG[entry.docstatus].cls}>
+                  {STATUS_CONFIG[entry.docstatus].label}
+                </Badge>
+              )}
+            </CardTitle>
+            <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-2 text-sm text-blue-900">
+                <ArrowRightLeft className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-medium">Internal transfer only (no customer).</p>
+                  <p className="text-blue-800/90">To send goods to a customer, use Sales Invoice.</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-blue-300 bg-white text-blue-900 hover:bg-blue-100"
+                onClick={() => router.push('/invoices/new')}
+              >
+                Create Sales Invoice
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

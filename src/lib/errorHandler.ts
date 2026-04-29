@@ -48,6 +48,11 @@ export function handleApiError(error: unknown): ApiErrorResult {
     let message = STATUS_MESSAGES[status] ?? 'An unexpected error occurred.';
     try {
       const data = error.response.data as Record<string, unknown>;
+      const directMessage = data?.message;
+      if (typeof directMessage === 'string' && directMessage.trim()) {
+        message = directMessage.replace(/<[^>]*>/g, '').trim();
+      }
+
       const raw = data?._server_messages as string | undefined;
       if (raw) {
         const parsed = JSON.parse(raw) as Array<{ message?: string } | string>;

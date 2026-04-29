@@ -177,6 +177,43 @@ export function useCancelInvoice() {
   });
 }
 
+export function useMarkInvoicePaid() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => invoiceService.markInvoicePaid(name),
+    onSuccess: (_, name) => {
+      queryClient.setQueriesData(
+        {
+          predicate: (query) =>
+            query.queryKey[0] === INVOICES_KEY &&
+            query.queryKey.length === 2 &&
+            (query.queryKey[1] === undefined || typeof query.queryKey[1] === 'object'),
+        },
+        (current: { data: SalesInvoice[]; total: number } | undefined) => {
+          if (!current) {
+            return current;
+          }
+
+          return {
+            ...current,
+            data: current.data.map((invoice) =>
+              invoice.name === name ? { ...invoice, outstanding_amount: 0, docstatus: 1 } : invoice
+            ),
+          };
+        }
+      );
+      queryClient.setQueryData([INVOICES_KEY, name], (current: SalesInvoice | undefined) =>
+        current ? { ...current, outstanding_amount: 0, docstatus: 1 } : current
+      );
+      queryClient.invalidateQueries({ queryKey: [INVOICES_KEY], refetchType: 'inactive' });
+      toast.success('Payment recorded. Invoice marked as paid.');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to record payment');
+    },
+  });
+}
+
 export function useInvoicesToday() {
   return useQuery({
     queryKey: [INVOICES_KEY, 'today-count'],
