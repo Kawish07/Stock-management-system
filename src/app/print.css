@@ -1,0 +1,11 @@
+@media print {
+  nav,
+  aside,
+  button {
+    display: none !important;
+  }
+
+  .print-area {
+    width: 100% !important;
+  }
+}

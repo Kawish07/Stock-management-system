@@ -58,6 +58,10 @@ export function handleApiError(error: unknown): ApiErrorResult {
         if (text) {
           // Strip HTML tags from the message
           message = text.replace(/<[^>]*>/g, '').trim();
+
+          if (message.toLowerCase().includes('common names and surnames are easy to guess')) {
+            message = 'Password is too weak. Use at least 8 characters with uppercase, lowercase, number, and special symbol. Avoid using names.';
+          }
         }
       }
     } catch {

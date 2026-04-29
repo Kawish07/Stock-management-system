@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useStockEntries } from '@/hooks/useStockEntry';
 import { formatDate, getDocStatusLabel, getDocStatusVariant } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getStockEntryTypeLabel } from '@/types/stockEntry.types';
 import {
   Table,
   TableBody,
@@ -57,7 +58,7 @@ export function RecentEntries() {
                 >
                   <TableCell className="font-medium text-sm">{entry.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {entry.stock_entry_type}
+                    {getStockEntryTypeLabel(entry.stock_entry_type)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(entry.posting_date)}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { InvoiceForm } from '@/components/invoices/InvoiceForm';
 import { buttonVariants } from '@/components/ui/button';
@@ -8,6 +9,9 @@ import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function NewInvoicePage() {
+  const searchParams = useSearchParams();
+  const defaultCustomer = searchParams.get('customer') ?? undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -21,9 +25,9 @@ export default function NewInvoicePage() {
       </div>
       <PageHeader
         title="New Sales Invoice"
-        description="Sell a product — stock is deducted automatically on submission"
+        description="Add items, apply taxes and submit to finalize billing"
       />
-      <InvoiceForm />
+      <InvoiceForm defaultCustomer={defaultCustomer} />
     </div>
   );
 }

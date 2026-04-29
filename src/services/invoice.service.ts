@@ -1,8 +1,13 @@
 import axiosInstance from '@/lib/axios';
 import { handleApiError } from '@/lib/errorHandler';
-import type { InvoiceRecord, CreateInvoiceDto } from '@/types/invoice.types';
+import type {
+  SalesInvoice,
+  InvoiceListRow,
+  InvoiceRecord,
+  CreateInvoiceDto,
+} from '@/types/invoice.types';
 
-// ── Local storage fallback ────────────────────────────────────────────────────
+// ── Local storage fallback (legacy single-item invoices) ─────────────────────
 const LS_KEY = 'stockflow_invoices';
 
 function loadLocalInvoices(): InvoiceRecord[] {
@@ -19,195 +24,65 @@ function saveLocalInvoices(records: InvoiceRecord[]) {
   localStorage.setItem(LS_KEY, JSON.stringify(records));
 }
 
-function generateLocalId(): string {
-  return `LOC-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-}
-
-// ── ERPNext list fields ───────────────────────────────────────────────────────
-const LIST_FIELDS = ['name', 'customer', 'posting_date', 'grand_total', 'docstatus', 'total_qty'];
+// ── List fields for the invoices table ───────────────────────────────────────
+const LIST_FIELDS = [
+  'name',
+  'customer',
+  'customer_name',
+  'posting_date',
+  'due_date',
+  'grand_total',
+  'outstanding_amount',
+  'docstatus',
+];
 
 export interface InvoiceFilters {
   customer?: string;
+  status?: 'Draft' | 'Unpaid' | 'Paid' | 'Cancelled';
   from_date?: string;
   to_date?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 }
 
 // ── Service ───────────────────────────────────────────────────────────────────
 export const invoiceService = {
-  /**
-   * Create a Sales Invoice in ERPNext AND reduce stock via Material Issue.
-   * Falls back to localStorage if ERPNext is unavailable.
-   */
-  async createInvoice(dto: CreateInvoiceDto): Promise<InvoiceRecord> {
-    const today = new Date().toISOString().split('T')[0];
-
-    // ── 1. Try ERPNext Sales Invoice ─────────────────────────────────────────
-    try {
-      // First, find default warehouse for the item if not provided
-      let warehouse = dto.warehouse;
-      if (!warehouse) {
-        try {
-          const binRes = await axiosInstance.get('/resource/Bin', {
-            params: {
-              fields: JSON.stringify(['warehouse', 'actual_qty']),
-              filters: JSON.stringify([['Bin', 'item_code', '=', dto.item_code]]),
-              order_by: 'actual_qty desc',
-              limit: 1,
-            },
-          });
-          warehouse = binRes.data.data?.[0]?.warehouse ?? '';
-        } catch {
-          warehouse = '';
-        }
-      }
-
-      // Create Sales Invoice (ERPNext handles stock deduction automatically)
-      const invoicePayload = {
-        customer: dto.customer || 'Walk-in Customer',
-        posting_date: today,
-        due_date: today,
-        items: [
-          {
-            item_code: dto.item_code,
-            item_name: dto.item_name,
-            qty: dto.qty,
-            rate: dto.rate,
-            uom: 'Nos',
-            ...(warehouse ? { warehouse } : {}),
-          },
-        ],
-        remarks: dto.remarks ?? '',
-        update_stock: 1, // tells ERPNext to also deduct stock
-      };
-
-      const res = await axiosInstance.post('/resource/Sales Invoice', invoicePayload);
-      const created = res.data.data;
-
-      // Submit the invoice so stock is actually deducted
-      await axiosInstance.put(`/resource/Sales Invoice/${encodeURIComponent(created.name)}`, {
-        docstatus: 1,
-      });
-
-      const record: InvoiceRecord = {
-        id: created.name,
-        customer: dto.customer || 'Walk-in Customer',
-        item_code: dto.item_code,
-        item_name: dto.item_name,
-        qty: dto.qty,
-        rate: dto.rate,
-        total: dto.qty * dto.rate,
-        warehouse,
-        remarks: dto.remarks,
-        date: today,
-        docstatus: 1,
-        source: 'erpnext',
-      };
-
-      // Mirror to local so offline list still works
-      const existing = loadLocalInvoices();
-      saveLocalInvoices([record, ...existing]);
-
-      return record;
-    } catch (erpError) {
-      // ── 2. Fallback: store locally + create Material Issue stock entry ───
-      console.warn('[InvoiceService] ERPNext Sales Invoice failed, using local fallback', erpError);
-
-      // Try to reduce stock via Material Issue (stock entry)
-      try {
-        let warehouse = dto.warehouse;
-        if (!warehouse) {
-          const binRes = await axiosInstance.get('/resource/Bin', {
-            params: {
-              fields: JSON.stringify(['warehouse', 'actual_qty']),
-              filters: JSON.stringify([['Bin', 'item_code', '=', dto.item_code]]),
-              order_by: 'actual_qty desc',
-              limit: 1,
-            },
-          });
-          warehouse = binRes.data.data?.[0]?.warehouse ?? '';
-        }
-
-        if (warehouse) {
-          const whRes = await axiosInstance.get(`/resource/Warehouse/${encodeURIComponent(warehouse)}`, {
-            params: { fields: JSON.stringify(['company']) },
-          });
-          const company = whRes.data.data?.company ?? '';
-
-          await axiosInstance.post('/resource/Stock Entry', {
-            stock_entry_type: 'Material Issue',
-            posting_date: today,
-            posting_time: new Date().toTimeString().slice(0, 8),
-            company,
-            docstatus: 1,
-            remarks: `Sale to ${dto.customer || 'Walk-in Customer'}${dto.remarks ? ` — ${dto.remarks}` : ''}`,
-            items: [
-              {
-                item_code: dto.item_code,
-                item_name: dto.item_name,
-                s_warehouse: warehouse,
-                qty: dto.qty,
-                uom: 'Nos',
-                stock_uom: 'Nos',
-                basic_rate: dto.rate,
-                basic_amount: dto.qty * dto.rate,
-              },
-            ],
-          });
-        }
-      } catch (seError) {
-        console.warn('[InvoiceService] Stock entry fallback also failed', seError);
-        const { message } = handleApiError(seError);
-        throw new Error(message);
-      }
-
-      // Save invoice record locally
-      const record: InvoiceRecord = {
-        id: generateLocalId(),
-        customer: dto.customer || 'Walk-in Customer',
-        item_code: dto.item_code,
-        item_name: dto.item_name,
-        qty: dto.qty,
-        rate: dto.rate,
-        total: dto.qty * dto.rate,
-        warehouse: dto.warehouse,
-        remarks: dto.remarks,
-        date: today,
-        docstatus: 1,
-        source: 'local',
-      };
-
-      const existing = loadLocalInvoices();
-      saveLocalInvoices([record, ...existing]);
-
-      return record;
-    }
-  },
-
-  /**
-   * List all invoices: merge ERPNext records + local-only records.
-   */
-  async getInvoices(filters?: InvoiceFilters): Promise<{ data: InvoiceRecord[]; total: number }> {
+  /** List invoices with optional filters (ERPNext Sales Invoice). */
+  async getAllInvoices(
+    filters?: InvoiceFilters
+  ): Promise<{ data: InvoiceListRow[]; total: number }> {
     const pageSize = filters?.pageSize ?? 50;
     const page = filters?.page ?? 1;
     const limitStart = (page - 1) * pageSize;
 
-    // Local records
-    const localRecords = loadLocalInvoices();
+    const apiFilters: (string | string[])[][] = [];
+
+    if (filters?.customer) {
+      apiFilters.push(['Sales Invoice', 'customer', 'like', `%${filters.customer}%`]);
+    }
+    if (filters?.search) {
+      apiFilters.push(['Sales Invoice', 'name', 'like', `%${filters.search}%`]);
+    }
+    if (filters?.from_date) {
+      apiFilters.push(['Sales Invoice', 'posting_date', '>=', filters.from_date]);
+    }
+    if (filters?.to_date) {
+      apiFilters.push(['Sales Invoice', 'posting_date', '<=', filters.to_date]);
+    }
+    if (filters?.status === 'Draft') {
+      apiFilters.push(['Sales Invoice', 'docstatus', '=', '0']);
+    } else if (filters?.status === 'Unpaid') {
+      apiFilters.push(['Sales Invoice', 'docstatus', '=', '1']);
+      apiFilters.push(['Sales Invoice', 'outstanding_amount', '>', '0']);
+    } else if (filters?.status === 'Paid') {
+      apiFilters.push(['Sales Invoice', 'docstatus', '=', '1']);
+      apiFilters.push(['Sales Invoice', 'outstanding_amount', '=', '0']);
+    } else if (filters?.status === 'Cancelled') {
+      apiFilters.push(['Sales Invoice', 'docstatus', '=', '2']);
+    }
 
     try {
-      const apiFilters: (string | string[])[][] = [];
-      if (filters?.customer) {
-        apiFilters.push(['Sales Invoice', 'customer', 'like', `%${filters.customer}%`]);
-      }
-      if (filters?.from_date) {
-        apiFilters.push(['Sales Invoice', 'posting_date', '>=', filters.from_date]);
-      }
-      if (filters?.to_date) {
-        apiFilters.push(['Sales Invoice', 'posting_date', '<=', filters.to_date]);
-      }
-
       const [listRes, countRes] = await Promise.all([
         axiosInstance.get('/resource/Sales Invoice', {
           params: {
@@ -215,7 +90,7 @@ export const invoiceService = {
             filters: apiFilters.length ? JSON.stringify(apiFilters) : undefined,
             limit: pageSize,
             limit_start: limitStart,
-            order_by: 'modified desc',
+            order_by: 'posting_date desc, name desc',
           },
         }),
         axiosInstance.get('/resource/Sales Invoice', {
@@ -227,78 +102,224 @@ export const invoiceService = {
         }),
       ]);
 
-      const erpRecords = (listRes.data.data ?? []).map(
-        (inv: { name: string; customer: string; posting_date: string; grand_total: number; docstatus: 0 | 1 | 2; total_qty: number }) => ({
-          id: inv.name,
-          customer: inv.customer,
-          item_code: '',
-          item_name: '(see invoice)',
-          qty: inv.total_qty ?? 0,
-          rate: 0,
-          total: inv.grand_total ?? 0,
-          date: inv.posting_date,
-          docstatus: inv.docstatus,
-          source: 'erpnext' as const,
-        })
-      );
-
-      // Merge: local-only (source=local) + ERP records, de-duped by id
-      const erpIds = new Set(erpRecords.map((r: InvoiceRecord) => r.id));
-      const localOnly = localRecords.filter((r) => r.source === 'local' || !erpIds.has(r.id));
-
-      const merged = [...erpRecords, ...localOnly].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-
       return {
-        data: merged,
-        total: (countRes.data.data as { name: string }[]).length + localOnly.length,
+        data: (listRes.data.data ?? []) as InvoiceListRow[],
+        total: (countRes.data.data ?? []).length,
       };
-    } catch {
-      // Offline: return local records only
-      return { data: localRecords, total: localRecords.length };
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
     }
   },
 
-  /** Count invoices created today (for KPI). */
+  /** Get a single Sales Invoice with all fields. */
+  async getInvoice(name: string): Promise<SalesInvoice> {
+    try {
+      const res = await axiosInstance.get(
+        `/resource/Sales Invoice/${encodeURIComponent(name)}`
+      );
+      return res.data.data as SalesInvoice;
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Create a Sales Invoice (saves as draft, docstatus=0). */
+  async createInvoice(data: SalesInvoice): Promise<SalesInvoice> {
+    try {
+      const res = await axiosInstance.post('/resource/Sales Invoice', data);
+      return res.data.data as SalesInvoice;
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Update a draft Sales Invoice. */
+  async updateInvoice(name: string, data: Partial<SalesInvoice>): Promise<SalesInvoice> {
+    try {
+      const res = await axiosInstance.put(
+        `/resource/Sales Invoice/${encodeURIComponent(name)}`,
+        data
+      );
+      return res.data.data as SalesInvoice;
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Submit a draft invoice (docstatus 0 → 1). Stock is deducted on submit. */
+  async submitInvoice(name: string): Promise<void> {
+    try {
+      await axiosInstance.post('/method/frappe.client.submit', {
+        doc: { doctype: 'Sales Invoice', name },
+      });
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Cancel a submitted invoice (docstatus 1 → 2). */
+  async cancelInvoice(name: string): Promise<void> {
+    try {
+      await axiosInstance.post('/method/frappe.client.cancel', {
+        doc: { doctype: 'Sales Invoice', name },
+      });
+    } catch (error) {
+      const { message } = handleApiError(error);
+      throw new Error(message);
+    }
+  },
+
+  /** Get item price from Item Price list for a given price list. */
+  async getItemPrice(
+    itemCode: string,
+    priceList = 'Standard Selling'
+  ): Promise<number> {
+    try {
+      const res = await axiosInstance.get('/resource/Item Price', {
+        params: {
+          fields: JSON.stringify(['price_list_rate']),
+          filters: JSON.stringify([
+            ['Item Price', 'item_code', '=', itemCode],
+            ['Item Price', 'price_list', '=', priceList],
+            ['Item Price', 'selling', '=', '1'],
+          ]),
+          limit: 1,
+        },
+      });
+      return (res.data.data?.[0]?.price_list_rate as number) ?? 0;
+    } catch {
+      return 0;
+    }
+  },
+
+  /** Search customers for the combobox. */
+  async searchCustomers(search?: string): Promise<{ name: string; customer_name: string }[]> {
+    try {
+      const filters: (string | string[])[][] = [];
+      if (search) {
+        filters.push(['Customer', 'customer_name', 'like', `%${search}%`]);
+      }
+      const res = await axiosInstance.get('/resource/Customer', {
+        params: {
+          fields: JSON.stringify(['name', 'customer_name']),
+          filters: filters.length ? JSON.stringify(filters) : undefined,
+          limit: 30,
+          order_by: 'customer_name asc',
+        },
+      });
+      return (res.data.data ?? []) as { name: string; customer_name: string }[];
+    } catch {
+      return [];
+    }
+  },
+
+  // ── Dashboard helpers (ERPNext) ───────────────────────────────────────────
+
+  async getInvoicesToday(): Promise<number> {
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      const res = await axiosInstance.get('/resource/Sales Invoice', {
+        params: {
+          fields: JSON.stringify(['name']),
+          filters: JSON.stringify([['Sales Invoice', 'posting_date', '=', today]]),
+          limit: 0,
+        },
+      });
+      return (res.data.data ?? []).length;
+    } catch {
+      return 0;
+    }
+  },
+
+  async getRevenueToday(): Promise<number> {
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      const res = await axiosInstance.get('/resource/Sales Invoice', {
+        params: {
+          fields: JSON.stringify(['grand_total']),
+          filters: JSON.stringify([
+            ['Sales Invoice', 'posting_date', '=', today],
+            ['Sales Invoice', 'docstatus', '=', '1'],
+          ]),
+          limit: 0,
+        },
+      });
+      const rows = (res.data.data ?? []) as { grand_total: number }[];
+      return rows.reduce((s, r) => s + (r.grand_total ?? 0), 0);
+    } catch {
+      return 0;
+    }
+  },
+
+  async getUnpaidInvoices(): Promise<{ count: number; amount: number }> {
+    try {
+      const res = await axiosInstance.get('/resource/Sales Invoice', {
+        params: {
+          fields: JSON.stringify(['outstanding_amount']),
+          filters: JSON.stringify([
+            ['Sales Invoice', 'docstatus', '=', '1'],
+            ['Sales Invoice', 'outstanding_amount', '>', '0'],
+          ]),
+          limit: 0,
+        },
+      });
+      const rows = (res.data.data ?? []) as { outstanding_amount: number }[];
+      return {
+        count: rows.length,
+        amount: rows.reduce((s, r) => s + (r.outstanding_amount ?? 0), 0),
+      };
+    } catch {
+      return { count: 0, amount: 0 };
+    }
+  },
+
+  // ── Legacy helpers kept for backward compat ───────────────────────────────
+
   getSalesToday(): number {
     const today = new Date().toISOString().split('T')[0];
     return loadLocalInvoices().filter((r) => r.date === today).length;
   },
 
-  /** Total revenue today (for KPI). */
   getRevenuToday(): number {
     const today = new Date().toISOString().split('T')[0];
     return loadLocalInvoices()
       .filter((r) => r.date === today)
-      .reduce((sum, r) => sum + r.total, 0);
+      .reduce((s, r) => s + r.total, 0);
   },
 
-  /** Look up a single invoice by id — local first, then ERPNext. */
-  async getInvoiceById(id: string): Promise<InvoiceRecord | null> {
-    // 1. Check local cache
-    const local = loadLocalInvoices().find((r) => r.id === id);
-    if (local) return local;
+  /** Legacy: create single-item invoice (used by old InvoiceForm). */
+  async createInvoiceLegacy(dto: CreateInvoiceDto): Promise<InvoiceRecord> {
+    const today = new Date().toISOString().split('T')[0];
+    const record: InvoiceRecord = {
+      id: `LOC-${Date.now()}`,
+      customer: dto.customer || 'Walk-in Customer',
+      item_code: dto.item_code,
+      item_name: dto.item_name,
+      qty: dto.qty,
+      rate: dto.rate,
+      total: dto.qty * dto.rate,
+      warehouse: dto.warehouse,
+      remarks: dto.remarks,
+      date: today,
+      docstatus: 1,
+      source: 'local',
+    };
+    const existing = loadLocalInvoices();
+    saveLocalInvoices([record, ...existing]);
+    return record;
+  },
 
-    // 2. Try ERPNext
-    try {
-      const res = await axiosInstance.get(`/resource/Sales Invoice/${encodeURIComponent(id)}`);
-      const inv = res.data.data;
-      const firstItem = inv.items?.[0];
-      return {
-        id: inv.name,
-        customer: inv.customer,
-        item_code: firstItem?.item_code ?? '',
-        item_name: firstItem?.item_name ?? '(see invoice)',
-        qty: firstItem?.qty ?? inv.total_qty ?? 0,
-        rate: firstItem?.rate ?? 0,
-        total: inv.grand_total ?? 0,
-        date: inv.posting_date,
-        docstatus: inv.docstatus,
-        source: 'erpnext',
-      } satisfies InvoiceRecord;
-    } catch {
-      return null;
-    }
+  /** Legacy list (local storage). */
+  async getInvoices(
+    filters?: InvoiceFilters
+  ): Promise<{ data: InvoiceRecord[]; total: number }> {
+    const records = loadLocalInvoices();
+    return { data: records, total: records.length };
   },
 };
+

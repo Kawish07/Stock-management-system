@@ -8,7 +8,7 @@ export default function InvoicesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Sales Invoices"
-        description="All sales transactions and stock deductions"
+        description="Create, track and manage sales invoices"
       />
       <InvoiceTable />
     </div>

@@ -12,7 +12,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
 
   useEffect(() => {
-    checkAuth();
+    void checkAuth();
   }, [checkAuth]);
 
   useEffect(() => {

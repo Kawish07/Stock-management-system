@@ -1,11 +1,5 @@
 import { z } from 'zod';
-
-export const STOCK_ENTRY_TYPES = [
-  'Material Receipt',
-  'Material Issue',
-  'Material Transfer',
-  'Stock Reconciliation',
-] as const;
+import { STOCK_ENTRY_TYPES } from '@/types/stockEntry.types';
 
 export const stockEntryItemSchema = z.object({
   item_code: z.string().min(1, 'Item is required'),
@@ -37,14 +31,14 @@ export const stockEntrySchema = z
         if (!item.s_warehouse) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Source warehouse required for Material Transfer',
+            message: 'Source warehouse required for Stock Transfer',
             path: ['items', i, 's_warehouse'],
           });
         }
         if (!item.t_warehouse) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Target warehouse required for Material Transfer',
+            message: 'Target warehouse required for Stock Transfer',
             path: ['items', i, 't_warehouse'],
           });
         }
@@ -66,7 +60,7 @@ export const stockEntrySchema = z
         if (!item.s_warehouse) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Source warehouse required for Material Issue',
+            message: 'Source warehouse required for Stock Out',
             path: ['items', i, 's_warehouse'],
           });
         }
@@ -77,7 +71,7 @@ export const stockEntrySchema = z
         if (!item.t_warehouse) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Target warehouse required for Material Receipt',
+            message: 'Target warehouse required for Stock In',
             path: ['items', i, 't_warehouse'],
           });
         }

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import './print.css';
 import { ThemeProvider } from 'next-themes';
 import { QueryProvider } from '@/components/providers/QueryProvider';
 import { Toaster } from 'react-hot-toast';

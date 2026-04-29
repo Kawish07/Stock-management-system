@@ -6,7 +6,6 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   stockEntrySchema,
-  STOCK_ENTRY_TYPES,
   type StockEntrySchema,
 } from '@/lib/validators/stockEntry.schema';
 import { Button } from '@/components/ui/button';
@@ -33,7 +32,11 @@ import {
 } from '@/hooks/useStockEntry';
 import { cn, formatDate, formatNumber } from '@/lib/utils';
 import toast from 'react-hot-toast';
-import type { StockEntry } from '@/types/stockEntry.types';
+import {
+  getStockEntryTypeLabel,
+  STOCK_ENTRY_TYPES,
+  type StockEntry,
+} from '@/types/stockEntry.types';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -224,7 +227,7 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
               <Label>Entry Type *</Label>
               {readOnly ? (
                 <Input
-                  value={stockEntryType}
+                  value={getStockEntryTypeLabel(stockEntryType)}
                   readOnly
                   className="bg-muted/50"
                 />
@@ -246,7 +249,7 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
                   <SelectContent>
                     {STOCK_ENTRY_TYPES.map((t) => (
                       <SelectItem key={t} value={t}>
-                        {t}
+                        {getStockEntryTypeLabel(t)}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -14,8 +14,8 @@ import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().min(1, 'Please enter your email or username'),
+  password: z.string().min(1, 'Please enter your password'),
 });
 type LoginForm = z.infer<typeof loginSchema>;
 
@@ -101,12 +101,12 @@ export default function LoginPage() {
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email or Username</Label>
                 <Input
                   id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="admin@example.com"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="admin@example.com or Administrator"
                   disabled={isSubmitting}
                   {...register('email')}
                   className={cn(errors.email && 'border-destructive focus-visible:ring-destructive')}

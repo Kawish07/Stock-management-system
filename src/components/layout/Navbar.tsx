@@ -70,9 +70,9 @@ export function Navbar() {
     return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
   };
 
   const initials =

@@ -8,6 +8,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { useStockEntry } from '@/hooks/useStockEntry';
 import { StockEntryForm } from '@/components/stock-entry/StockEntryForm';
 import { formatDate } from '@/lib/utils';
+import { getStockEntryTypeLabel } from '@/types/stockEntry.types';
 import { ArrowLeft } from 'lucide-react';
 
 export default function StockEntryDetailPage() {
@@ -27,7 +28,7 @@ export default function StockEntryDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={entry.name ?? 'Stock Entry'}
-        description={`${entry.stock_entry_type} · ${formatDate(entry.posting_date)}`}
+        description={`${getStockEntryTypeLabel(entry.stock_entry_type)} · ${formatDate(entry.posting_date)}`}
         actions={
           <Link
             href="/stock-entries"

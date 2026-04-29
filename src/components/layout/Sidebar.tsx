@@ -12,7 +12,9 @@ import {
   ChevronDown,
   Layers,
   LogOut,
-  Receipt,
+  FileText,
+  Users2,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -26,20 +28,48 @@ type NavItem =
   | { label: string; href: string; icon: React.ElementType; children?: undefined }
   | { label: string; href?: undefined; icon: React.ElementType; children: NavChild[] };
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Items', href: '/items', icon: Package },
-  { label: 'Categories', href: '/categories', icon: FolderTree },
-  { label: 'Warehouses', href: '/warehouses', icon: Warehouse },
-  { label: 'Stock Entry', href: '/stock-entries', icon: ArrowLeftRight },
-  { label: 'Sales Invoices', href: '/invoices', icon: Receipt },
+type NavSection = {
+  heading?: string;
+  items: NavItem[];
+};
+
+const navSections: NavSection[] = [
   {
-    label: 'Reports',
-    icon: BarChart3,
-    children: [
-      { label: 'Stock Balance', href: '/reports/stock-balance' },
-      { label: 'Stock Ledger', href: '/reports/stock-ledger' },
+    items: [{ label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }],
+  },
+  {
+    heading: 'INVENTORY',
+    items: [
+      { label: 'Items', href: '/items', icon: Package },
+      { label: 'Categories', href: '/categories', icon: FolderTree },
+      { label: 'Warehouses', href: '/warehouses', icon: Warehouse },
+      { label: 'Stock Entry', href: '/stock-entries', icon: ArrowLeftRight },
     ],
+  },
+  {
+    heading: 'SALES',
+    items: [
+      { label: 'Customers', href: '/customers', icon: Users2 },
+      { label: 'Invoices', href: '/invoices', icon: FileText },
+    ],
+  },
+  {
+    heading: 'REPORTS',
+    items: [
+      {
+        label: 'Reports',
+        icon: BarChart3,
+        children: [
+          { label: 'Stock Balance', href: '/reports/stock-balance' },
+          { label: 'Stock Ledger', href: '/reports/stock-ledger' },
+          { label: 'Sales Report', href: '/reports/sales' },
+        ],
+      },
+    ],
+  },
+  {
+    heading: 'SETTINGS',
+    items: [{ label: 'Users', href: '/users', icon: Users }],
   },
 ];
 
@@ -63,9 +93,9 @@ export function Sidebar({ onNavClick }: SidebarProps) {
     );
   };
 
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
   };
 
   const initials =
@@ -94,8 +124,26 @@ export function Sidebar({ onNavClick }: SidebarProps) {
       </div>
 
       {/* ── Navigation ───────────────────────────────────────────── */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {navItems.map((item) => {
+      <nav className="flex-1 overflow-y-auto p-3 space-y-3">
+        {navSections.map((section, sectionIdx) => (
+          <div key={section.heading ?? `section-${sectionIdx}`} className="space-y-0.5">
+            {section.heading && (
+              <p className="px-3 pt-1 pb-1 text-[10px] tracking-widest text-zinc-400 dark:text-zinc-500 font-semibold">
+                {section.heading}
+              </p>
+            )}
+
+            {section.items.map((item) => {
+          /* ── Hide Users link for non-System Managers ── */
+          if (item.href === '/users') {
+            const isSystemManager = user?.roles?.some((r) => r.role === 'System Manager');
+            const isAdministrator =
+              user?.name === 'Administrator' ||
+              user?.email === 'Administrator' ||
+              user?.full_name === 'Administrator';
+            if (!isSystemManager && !isAdministrator) return null;
+          }
+
           /* ── Group / accordion ── */
           if (item.children) {
             const isOpen = openGroups.includes(item.label);
@@ -167,6 +215,8 @@ export function Sidebar({ onNavClick }: SidebarProps) {
             </Link>
           );
         })}
+          </div>
+        ))}
       </nav>
 
       {/* ── User info + Logout ──────────────────────────────────── */}

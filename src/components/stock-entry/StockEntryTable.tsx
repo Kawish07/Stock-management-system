@@ -28,8 +28,12 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { TableErrorState } from '@/components/shared/TableErrorState';
 import { Plus, Eye, ArrowLeftRight } from 'lucide-react';
 import { formatDate, formatNumber } from '@/lib/utils';
-import { STOCK_ENTRY_TYPES } from '@/lib/validators/stockEntry.schema';
-import type { StockEntry } from '@/types/stockEntry.types';
+import {
+  ENTRY_TYPE_BADGE_CLASSES,
+  getStockEntryTypeLabel,
+  STOCK_ENTRY_TYPES,
+  type StockEntry,
+} from '@/types/stockEntry.types';
 
 const STATUS_BADGE: Record<number, string> = {
   0: 'bg-yellow-100 text-yellow-800 border border-yellow-200 hover:bg-yellow-100',
@@ -99,7 +103,7 @@ export function StockEntryTable() {
             <SelectContent>
               <SelectItem value="__all__">All types</SelectItem>
               {STOCK_ENTRY_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
+                <SelectItem key={t} value={t}>{getStockEntryTypeLabel(t)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -218,7 +222,11 @@ export function StockEntryTable() {
                   <TableCell className="font-mono text-sm font-medium">
                     {entry.name}
                   </TableCell>
-                  <TableCell className="text-sm">{entry.stock_entry_type}</TableCell>
+                  <TableCell>
+                    <Badge className={ENTRY_TYPE_BADGE_CLASSES[entry.stock_entry_type]}>
+                      {getStockEntryTypeLabel(entry.stock_entry_type)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(entry.posting_date)}
                   </TableCell>
