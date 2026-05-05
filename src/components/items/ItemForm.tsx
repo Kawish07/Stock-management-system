@@ -14,10 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useCreateItem, useUpdateItem } from '@/hooks/useItems';
 import { useCategories } from '@/hooks/useCategories';
+import { useCompanies } from '@/hooks/useCompanies';
+import { expiryService } from '@/services/expiry.service';
 import { ApiErrorAlert } from '@/components/shared/ApiErrorAlert';
 import { generateItemCode } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import type { Item } from '@/types/item.types';
+import type { UpdateItemDto } from '@/types/item.types';
 
 const UOM_OPTIONS = ['Nos', 'Kg', 'Ltr', 'Box', 'Pcs', 'Meter', 'Pair'] as const;
 
@@ -31,9 +34,13 @@ export function ItemForm({ item }: ItemFormProps) {
   const createItem = useCreateItem();
   const updateItem = useUpdateItem();
   const [apiError, setApiError] = useState<string | null>(null);
+  const [expiryDate, setExpiryDate] = useState<string>('');
 
   const { data: categoriesData } = useCategories();
   const categories = categoriesData?.flat ?? [];
+
+  const { data: companiesData } = useCompanies({ limit: 100 });
+  const companies = companiesData?.data ?? [];
 
   const isLoading = createItem.isPending || updateItem.isPending;
 
@@ -51,11 +58,13 @@ export function ItemForm({ item }: ItemFormProps) {
       item_group: item?.item_group ?? '',
       description: item?.description ?? '',
       stock_uom: item?.stock_uom ?? 'Nos',
-      opening_stock: item?.opening_stock ?? 0,
-      valuation_rate: item?.valuation_rate ?? 0,
-      reorder_level: item?.reorder_level ?? 0,
-      is_stock_item: item?.is_stock_item ?? true,
-      disabled: item?.disabled ?? false,
+      opening_stock: Number(item?.opening_stock ?? 0),
+      valuation_rate: Number(item?.valuation_rate ?? 0),
+      reorder_level: Number(item?.reorder_level ?? 0),
+      // ERPNext returns booleans as 0/1 integers — coerce explicitly
+      is_stock_item: Boolean(item?.is_stock_item ?? true),
+      disabled: Boolean(item?.disabled ?? false),
+      company: item?.company ?? '',
     },
   });
 
@@ -78,16 +87,33 @@ export function ItemForm({ item }: ItemFormProps) {
   }, [isEdit, item?.item_group, categories.length, setValue]);
 
   const onSubmit = async (values: ItemSchema) => {
-    console.log('[ItemForm] onSubmit called, isEdit:', isEdit, 'item.name:', item?.name, 'values:', values);
     setApiError(null);
     try {
       if (isEdit) {
-        await updateItem.mutateAsync({ name: item.name, data: values });
-        toast.success('Item saved successfully!');
+        const updatePayload: UpdateItemDto = {
+          item_name: values.item_name,
+          item_group: values.item_group,
+          description: values.description,
+          disabled: values.disabled,
+          company: values.company || undefined,
+        };
+        await updateItem.mutateAsync({ name: item.name, data: updatePayload });
       } else {
         await createItem.mutateAsync(values);
-        toast.success('Item saved successfully!');
       }
+
+      // Save expiry date directly on the item via custom field — no Batch doctype needed
+      if (expiryDate) {
+        const itemCode = isEdit ? item.name : values.item_code;
+        try {
+          await expiryService.setItemExpiry(itemCode, expiryDate);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          setApiError(`Item saved, but expiry date could not be set: ${msg}`);
+          return;
+        }
+      }
+
       router.push('/items');
     } catch (error) {
       setApiError(error instanceof Error ? error.message : 'An unexpected error occurred.');
@@ -155,6 +181,24 @@ export function ItemForm({ item }: ItemFormProps) {
             {errors.item_group && (
               <p className="text-xs text-destructive">{errors.item_group.message}</p>
             )}
+          </div>
+
+          {/* Company */}
+          <div className="space-y-1.5">
+            <Label htmlFor="company">Company</Label>
+            <select
+              id="company"
+              {...register('company')}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">All Companies</option>
+              {companies.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.company_name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Select the company this product belongs to</p>
           </div>
 
           {/* Description — full width */}
@@ -242,6 +286,20 @@ export function ItemForm({ item }: ItemFormProps) {
               <p className="text-xs text-destructive">{errors.reorder_level.message}</p>
             )}
           </div>
+
+          {/* Expiry Date */}
+          <div className="md:col-span-2 space-y-1.5">
+            <Label htmlFor="expiry_date">Expiry Date</Label>
+            <Input
+              id="expiry_date"
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional — each product can have its own expiry date. Appears in Near Expiry &amp; Expired sections.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -251,24 +309,27 @@ export function ItemForm({ item }: ItemFormProps) {
           <CardTitle className="text-base">Settings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="is_stock_item"
-              checked={isStockItem}
-              onCheckedChange={(checked) => setValue('is_stock_item', Boolean(checked))}
-              className="mt-0.5"
-            />
-            <div>
-              <Label htmlFor="is_stock_item" className="cursor-pointer leading-none">
-                Is Stock Item
-              </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Track inventory quantity for this item
-              </p>
-            </div>
-          </div>
-
-          <Separator />
+          {!isEdit && (
+            <>
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="is_stock_item"
+                  checked={isStockItem}
+                  onCheckedChange={(checked) => setValue('is_stock_item', Boolean(checked))}
+                  className="mt-0.5"
+                />
+                <div>
+                  <Label htmlFor="is_stock_item" className="cursor-pointer leading-none">
+                    Is Stock Item
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Track inventory quantity for this item
+                  </p>
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
 
           <div className="flex items-start gap-3">
             <Checkbox

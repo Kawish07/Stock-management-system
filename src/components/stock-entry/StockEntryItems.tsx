@@ -212,6 +212,8 @@ interface ItemRowProps {
   warehouses: Warehouse[];
   readOnly: boolean;
   onRemove: () => void;
+  expiryDate: string;
+  onExpiryChange: (date: string) => void;
 }
 
 function ItemRow({
@@ -222,6 +224,8 @@ function ItemRow({
   warehouses,
   readOnly,
   onRemove,
+  expiryDate,
+  onExpiryChange,
 }: ItemRowProps) {
   const { register, setValue, control, formState: { errors } } = form;
 
@@ -340,6 +344,19 @@ function ItemRow({
           />
         </div>
 
+        {/* Expiry Date */}
+        {!readOnly && (
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Expiry Date</Label>
+            <Input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => onExpiryChange(e.target.value)}
+              className="h-8 text-xs"
+            />
+          </div>
+        )}
+
         {/* Source Warehouse */}
         {showSource && (
           <div className="col-span-2 space-y-1">
@@ -388,12 +405,16 @@ interface StockEntryItemsProps {
   form: UseFormReturn<StockEntrySchema>;
   stockEntryType: string;
   readOnly?: boolean;
+  expiryDates: Record<number, string>;
+  onExpiryChange: (index: number, date: string) => void;
 }
 
 export function StockEntryItems({
   form,
   stockEntryType,
   readOnly = false,
+  expiryDates,
+  onExpiryChange,
 }: StockEntryItemsProps) {
   const { control, formState: { errors } } = form;
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
@@ -458,6 +479,8 @@ export function StockEntryItems({
             warehouses={warehouses}
             readOnly={readOnly}
             onRemove={() => remove(index)}
+            expiryDate={expiryDates[index] ?? ''}
+            onExpiryChange={(date) => onExpiryChange(index, date)}
           />
         ))}
       </div>

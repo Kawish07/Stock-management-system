@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
@@ -15,6 +15,9 @@ import {
   FileText,
   Users2,
   Users,
+  Building2,
+  CalendarX2,
+  UserRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -44,6 +47,14 @@ const navSections: NavSection[] = [
       { label: 'Categories', href: '/categories', icon: FolderTree },
       { label: 'Warehouses', href: '/warehouses', icon: Warehouse },
       { label: 'Stock Entry', href: '/stock-entries', icon: ArrowLeftRight },
+      {
+        label: 'Expiry',
+        icon: CalendarX2,
+        children: [
+          { label: 'Near Expiry', href: '/expiry/near' },
+          { label: 'Expired', href: '/expiry/expired' },
+        ],
+      },
     ],
   },
   {
@@ -51,6 +62,20 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Customers', href: '/customers', icon: Users2 },
       { label: 'Invoices', href: '/invoices', icon: FileText },
+    ],
+  },
+  {
+    heading: 'MANAGEMENT',
+    items: [
+      { label: 'Companies', href: '/companies', icon: Building2 },
+      {
+        label: 'Employees',
+        icon: UserRound,
+        children: [
+          { label: 'List', href: '/employees' },
+          { label: 'Salaries', href: '/employees?tab=salaries' },
+        ],
+      },
     ],
   },
   {
@@ -80,12 +105,17 @@ interface SidebarProps {
 export function Sidebar({ onNavClick }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, logout } = useAuthStore();
 
   // Auto-open Reports group if on a reports page
-  const [openGroups, setOpenGroups] = useState<string[]>(() =>
-    pathname.startsWith('/reports') ? ['Reports'] : []
-  );
+  const [openGroups, setOpenGroups] = useState<string[]>(() => {
+    const groups: string[] = [];
+    if (pathname.startsWith('/reports')) groups.push('Reports');
+    if (pathname.startsWith('/expiry')) groups.push('Expiry');
+    if (pathname.startsWith('/employees')) groups.push('Employees');
+    return groups;
+  });
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) =>
@@ -147,7 +177,7 @@ export function Sidebar({ onNavClick }: SidebarProps) {
           /* ── Group / accordion ── */
           if (item.children) {
             const isOpen = openGroups.includes(item.label);
-            const isGroupActive = item.children.some((c) => pathname.startsWith(c.href));
+            const isGroupActive = item.children.some((c) => pathname.startsWith(c.href.split('?')[0]));
             return (
               <div key={item.label}>
                 <button
@@ -172,7 +202,27 @@ export function Sidebar({ onNavClick }: SidebarProps) {
                 {isOpen && (
                   <div className="ml-4 pl-3 mt-0.5 space-y-0.5 border-l border-zinc-200 dark:border-zinc-700">
                     {item.children.map((child) => {
-                      const childActive = pathname === child.href || pathname.startsWith(child.href + '/');
+                      const [childPath, childQuery] = child.href.split('?');
+                      const childQps = childQuery ? new URLSearchParams(childQuery) : null;
+                      let childActive: boolean;
+                      if (childQps) {
+                        // href has query — match path + all query params
+                        childActive =
+                          pathname === childPath &&
+                          [...childQps.entries()].every(([k, v]) => searchParams.get(k) === v);
+                      } else {
+                        // plain path — active only when no sibling query-param child also matches
+                        const siblingMatches = item.children.some((other) => {
+                          if (other.href === child.href || !other.href.includes('?')) return false;
+                          const [op, oq] = other.href.split('?');
+                          if (pathname !== op) return false;
+                          const oqs = new URLSearchParams(oq);
+                          return [...oqs.entries()].every(([k, v]) => searchParams.get(k) === v);
+                        });
+                        childActive =
+                          !siblingMatches &&
+                          (pathname === childPath || pathname.startsWith(childPath + '/'));
+                      }
                       return (
                         <Link
                           key={child.href}

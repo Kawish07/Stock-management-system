@@ -9,8 +9,9 @@ export const itemSchema = z.object({
   opening_stock: z.number().min(0, 'Opening stock cannot be negative').default(0),
   valuation_rate: z.number().min(0, 'Valuation rate cannot be negative').default(0),
   reorder_level: z.number().min(0, 'Reorder level cannot be negative').default(0),
-  is_stock_item: z.boolean().default(true),
-  disabled: z.boolean().default(false),
+  is_stock_item: z.coerce.boolean().default(true),
+  disabled: z.coerce.boolean().default(false),
+  company: z.string().optional(),
 });
 
 export type ItemSchema = z.infer<typeof itemSchema>;

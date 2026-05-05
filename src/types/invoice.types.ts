@@ -22,6 +22,7 @@ export interface InvoiceTax {
 
 export interface SalesInvoice {
   name?: string;
+  company?: string;
   customer: string;
   customer_name?: string;
   posting_date: string;

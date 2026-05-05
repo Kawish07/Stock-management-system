@@ -1,5 +1,3 @@
-import { type AxiosRequestTransformer, type Method } from 'axios';
-import axios from 'axios';
 import { type NextRequest, NextResponse } from 'next/server';
 
 const FORWARDED_HEADERS = ['cookie', 'x-frappe-csrf-token', 'authorization'];
@@ -93,11 +91,12 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
   }
 
   // 3. Prepare Body
-  let body: unknown = null;
+  let body: string | null = null;
   if (method !== 'GET' && method !== 'DELETE') {
     headers['Content-Type'] = 'application/json';
     try {
-      body = await req.json();
+      const json = await req.json();
+      body = JSON.stringify(json);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown body parsing error';
       console.warn('[PROXY] Body parsing failed:', message);
@@ -107,72 +106,49 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
 
   try {
     console.log('[PROXY] Sending request...');
-    
-    // ── AXIOS CONFIG ─────────────────────────────────────────
-    const transformRequest: AxiosRequestTransformer = (data: unknown) => {
-      if (data !== null && data !== undefined && typeof data === 'object') {
-        return JSON.stringify(data);
-      }
 
-      return data;
-    };
-
-    const upstream = await axios({
-      method: method.toLowerCase() as Method,
-      url: targetUrl,
+    // Use native fetch — unlike axios/Node http, it never sends Expect: 100-continue
+    const upstream = await fetch(targetUrl, {
+      method,
       headers,
-      data: body,
-      // Never throw for non-2xx — forward all HTTP statuses as-is
-      validateStatus: () => true,
-      // Serialize body as JSON (required when overriding transformRequest)
-      transformRequest: [transformRequest],
-      // 10s timeout for slow Frappe
-      timeout: 10000,
+      body: body ?? undefined,
+      // @ts-expect-error — Node 18+ fetch supports this to disable keep-alive
+      duplex: 'half',
     });
 
-    // ── RESPONSE DATA ─────────────────────────────────
-    const data = upstream.data;
     const status = upstream.status;
-
     console.log(`[PROXY] Response Status: ${status}`);
-    console.log(`[PROXY] Data Type: ${typeof data}`);
+
+    // Read raw response text
+    const rawText = await upstream.text();
     if (status >= 400) {
-      console.log(`[PROXY] Error Response Body:`, JSON.stringify(data))
-    }
-    if (data instanceof Buffer || data instanceof ArrayBuffer) {
-      console.log(`[PROXY] Buffer Received of length: ${data instanceof Buffer ? data.length : data.byteLength}`);
+      console.log(`[PROXY] Error Response Body:`, rawText.slice(0, 500));
     }
 
-    // ───── SAFE RESPONSE HANDLING ─────────────────────────────────
+    // Collect set-cookie for forwarding
+    const setCookieRaw = upstream.headers.getSetCookie?.() ?? [];
 
-    // ── CASE 1: BINARY DATA ─────────────────────────
-    // PDFs, Images, Buffers
-    if (data instanceof Buffer) {
-      // NextResponse handles Buffers automatically
-      return new Response(data, { status });
-    } 
-    else if (data instanceof ArrayBuffer) {
-      return new Response(data, { status, headers: { 'Content-Type': 'application/octet-stream' } });
+    // ── CASE 1: HTML error page ─────────────────────────────────
+    if (rawText.includes('<!DOCTYPE html>')) {
+      console.error('[PROXY] Frappe returned HTML page instead of JSON.');
+      return NextResponse.json(
+        { message: 'Frappe authentication failed. Check credentials or token.' },
+        { status: 503 }
+      );
     }
 
-    // ── CASE 2: STRING DATA ─────────────────────────
-    if (typeof data === 'string') {
-      // ── FIX: Detect HTML Errors (503 Bad Gateway) ─────────
-      // Often Frappe returns HTML on auth failure
-      if (data.includes('<!DOCTYPE html>')) {
-        console.error('[PROXY] Frappe returned HTML Page instead of JSON.');
-        return NextResponse.json(
-          { message: 'Frappe Authentication failed. Check credentials or Token.' },
-          { status: 503 } // 503 Bad Gateway
-        );
-      }
-      // Regular JSON
-      return applyUpstreamCookies(NextResponse.json(data, { status }), upstream.headers['set-cookie']);
+    // ── CASE 2: Parse JSON ──────────────────────────────────────
+    let parsed: unknown;
+    try {
+      parsed = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      // Non-JSON response — return as plain text
+      return new Response(rawText, { status, headers: { 'Content-Type': 'text/plain' } });
     }
 
-    // ── CASE 3: OBJECT DATA (JSON) ─────────────────
-    console.log(`[PROXY] Sending response...`);
-    return applyUpstreamCookies(NextResponse.json(data ?? {}, { status }), upstream.headers['set-cookie']);
+    const response = NextResponse.json(parsed ?? {}, { status });
+    applyUpstreamCookies(response, setCookieRaw);
+    return response;
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';

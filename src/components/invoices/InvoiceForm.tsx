@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useItems } from '@/hooks/useItems';
 import { useCreateInvoice, useUpdateInvoice, useSubmitInvoice } from '@/hooks/useInvoice';
 import { useCustomerBalance } from '@/hooks/useCustomers';
+import { useCompanies } from '@/hooks/useCompanies';
 import { invoiceService } from '@/services/invoice.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -207,9 +208,13 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
   const { data: itemsData } = useItems({ limit: 500 });
   const allItems: Item[] = itemsData?.data ?? [];
 
+  const { data: companiesData } = useCompanies({ limit: 100 });
+  const allCompanies = companiesData?.data ?? [];
+
   // â”€â”€ Form state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [customer, setCustomer] = useState(existing?.customer ?? defaultCustomer ?? '');
   const [customerName, setCustomerName] = useState(existing?.customer_name ?? '');
+  const [company, setCompany] = useState(existing?.company ?? '');
   const [postingDate, setPostingDate] = useState(existing?.posting_date ?? today());
   const [dueDate, setDueDate] = useState(existing?.due_date ?? dueDateDefault());
   const [remarks, setRemarks] = useState(existing?.remarks ?? '');
@@ -327,6 +332,7 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
 
     return {
       ...(existing?.name ? { name: existing.name } : {}),
+      company: company || undefined,
       customer,
       posting_date: postingDate,
       due_date: dueDate,
@@ -393,6 +399,24 @@ export function InvoiceForm({ existing, defaultCustomer }: InvoiceFormProps) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Company selector */}
+            <div className="space-y-1.5">
+              <Label>Company</Label>
+              {isDraft ? (
+                <select
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Select company…</option>
+                  {allCompanies.map((c) => (
+                    <option key={c.name} value={c.name}>{c.company_name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm font-medium py-2">{existing?.company ?? '—'}</p>
+              )}
+            </div>
             <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
               <Label>Customer <span className="text-destructive">*</span></Label>
               {isDraft ? (

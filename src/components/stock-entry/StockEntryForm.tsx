@@ -38,6 +38,7 @@ import {
   type StockEntry,
 } from '@/types/stockEntry.types';
 import { AlertTriangle, CheckCircle2, XCircle, ArrowRightLeft } from 'lucide-react';
+import { expiryService } from '@/services/expiry.service';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,10 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [expiryDates, setExpiryDates] = useState<Record<number, string>>({});
+
+  const handleExpiryChange = (index: number, date: string) =>
+    setExpiryDates((prev) => ({ ...prev, [index]: date }));
 
   const isEdit = !!entry?.name;
   const isSubmitted = entry?.docstatus === 1;
@@ -137,11 +142,24 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
     return result.name!;
   };
 
+  // Persist any expiry dates set on items
+  const saveExpiryDates = async (items: StockEntrySchema['items']) => {
+    const entries = Object.entries(expiryDates).filter(([, d]) => d);
+    if (entries.length === 0) return;
+    await Promise.all(
+      entries.map(([idx, date]) => {
+        const code = items[Number(idx)]?.item_code;
+        return code ? expiryService.setItemExpiry(code, date) : Promise.resolve();
+      })
+    );
+  };
+
   // "Save Draft" button handler
   const onSaveDraft = async (values: StockEntrySchema) => {
     setApiError(null);
     try {
       const name = await saveAsDraft(values);
+      await saveExpiryDates(values.items);
       toast.success('Draft saved successfully!');
       router.push(`/stock-entries/${encodeURIComponent(name)}`);
     } catch (error) {
@@ -154,6 +172,7 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
     setApiError(null);
     try {
       const name = await saveAsDraft(values);
+      await saveExpiryDates(values.items);
       await submitEntry.mutateAsync(name);
       toast.success('Stock entry submitted successfully!');
       router.push(`/stock-entries/${encodeURIComponent(name)}`);
@@ -348,6 +367,8 @@ export function StockEntryForm({ entry }: StockEntryFormProps) {
             form={form}
             stockEntryType={stockEntryType}
             readOnly={readOnly}
+            expiryDates={expiryDates}
+            onExpiryChange={handleExpiryChange}
           />
         </CardContent>
       </Card>

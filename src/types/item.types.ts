@@ -12,6 +12,7 @@
   disabled: boolean;
   actual_qty?: number;
   image?: string;
+  company?: string;
 }
 
 export type CreateItemDto = Omit<Item, 'name' | 'actual_qty'>;
