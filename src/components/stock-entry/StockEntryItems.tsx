@@ -127,7 +127,9 @@ function WarehouseCombobox({
   placeholder = 'Select warehouse…',
 }: WarehouseComboboxProps) {
   const [open, setOpen] = useState(false);
-  const label = warehouses.find((w) => w.name === value)?.warehouse_name;
+  // Filter out group warehouses (they can't hold stock) and disabled ones
+  const leafWarehouses = warehouses.filter((w) => !w.is_group && !w.disabled);
+  const label = leafWarehouses.find((w) => w.name === value)?.name;
 
   if (readOnly) {
     return (
@@ -176,10 +178,10 @@ function WarehouseCombobox({
                 />
                 None
               </CommandItem>
-              {warehouses.map((w) => (
+              {leafWarehouses.map((w) => (
                 <CommandItem
                   key={w.name}
-                  value={w.warehouse_name}
+                  value={w.name}
                   onSelect={() => {
                     onChange(w.name);
                     setOpen(false);
@@ -191,7 +193,7 @@ function WarehouseCombobox({
                       value === w.name ? 'opacity-100' : 'opacity-0'
                     )}
                   />
-                  {w.warehouse_name}
+                  {w.name}
                 </CommandItem>
               ))}
             </CommandGroup>

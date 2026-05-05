@@ -29,7 +29,14 @@ export const warehousesService = {
           order_by: 'warehouse_name asc',
         },
       });
-      return response.data.data as Warehouse[];
+      const data = response.data.data as Warehouse[];
+      // Deduplicate by name (ERPNext may return duplicates across companies)
+      const seen = new Set<string>();
+      return data.filter((w) => {
+        if (seen.has(w.name)) return false;
+        seen.add(w.name);
+        return true;
+      });
     } catch (error) {
       const { message } = handleApiError(error);
       throw new Error(message);
